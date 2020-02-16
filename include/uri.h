@@ -16,11 +16,10 @@ public:
     using const_iterator = const char *;
     using size_type = size_t;
 private:
-    const char *m_ref;
-    size_t m_length;
+    const char *m_ref = nullptr;
+    size_t m_length = 0;
 public:
-    string_ref() = default;
-    string_ref(std::nullptr_t) = delete;
+    string_ref() : m_ref(nullptr), m_length(0) {}
     constexpr string_ref(const char *ref, size_t mLength) : m_ref(ref), m_length(mLength) {}
     string_ref(const char *ref) : m_ref(ref), m_length(strlen(ref)) {}
     string_ref(const std::string &string) : m_ref(string.c_str()), m_length(string.length()) {}
@@ -46,7 +45,6 @@ public:
         char *S = A.allocate(m_length);
         std::copy(begin(), end(), S);
         return string_ref(S, m_length);
-
     }
     char operator[](size_t index) const { return m_ref[index]; }
 
@@ -59,6 +57,11 @@ public:
     constexpr option() = default;
     option(const T &y) : fStorage(y), fHas(true) {}
     option(T &&y) : fStorage(std::move(y)), fHas(true) {}
+    option &operator=(const option &v) {
+        fStorage = v.fStorage;
+        fHas = v.fHas;
+        return *this;
+    }
     option &operator=(T &&v) {
         fStorage = std::move(v);
         fHas = true;

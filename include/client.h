@@ -57,7 +57,8 @@ public:
     RequestID RegisterCapability() {
         return SendRequest("client/registerCapability");
     }
-    void DidOpen(DocumentUri uri, std::string &text) {
+
+    void DidOpen(DocumentUri uri, string_ref text) {
         DidOpenTextDocumentParams params;
         params.textDocument.uri = std::move(uri);
         params.textDocument.languageId = "cpp";
@@ -69,9 +70,134 @@ public:
         params.textDocument.uri = std::move(uri);
         SendNotify("textDocument/didClose", params);
     }
-    RequestID RangeFomatting() {
-
-        return SendRequest("sync");
+    void DidChange(DocumentUri uri, std::vector<TextDocumentContentChangeEvent> &changes,
+                   option<bool> wantDiagnostics = {}) {
+        DidChangeTextDocumentParams params;
+        params.textDocument.uri = std::move(uri);
+        params.contentChanges = std::move(changes);
+        params.wantDiagnostics = wantDiagnostics;
+        SendNotify("textDocument/didChange", params);
+    }
+    RequestID RangeFomatting(DocumentUri uri, Range range) {
+        DocumentRangeFormattingParams params;
+        params.textDocument.uri = std::move(uri);
+        params.range = range;
+        return SendRequest("textDocument/rangeFormatting", params);
+    }
+    RequestID OnTypeFormatting(DocumentUri uri, Position position, std::string ch) {
+        DocumentOnTypeFormattingParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        params.ch = std::move(ch);
+        return SendRequest("textDocument/onTypeFormatting", std::move(params));
+    }
+    RequestID Formatting(DocumentUri uri) {
+        DocumentFormattingParams params;
+        params.textDocument.uri = std::move(uri);
+        return SendRequest("textDocument/formatting", std::move(params));
+    }
+    RequestID CodeAction(DocumentUri uri, Range range, CodeActionContext context) {
+        CodeActionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.range = range;
+        params.context = std::move(context);
+        return SendRequest("textDocument/codeAction", std::move(params));
+    }
+    RequestID Completion(DocumentUri uri, Position position, CompletionContext context) {
+        CompletionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        params.context = std::move(context);
+        return SendRequest("textDocument/completion", std::move(params));
+    }
+    RequestID SignatureHelp(DocumentUri uri, Position position) {
+        TextDocumentPositionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/signatureHelp", std::move(params));
+    }
+    RequestID GoToDefinition(DocumentUri uri, Position position) {
+        TextDocumentPositionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/definition", std::move(params));
+    }
+    RequestID GoToDeclaration(DocumentUri uri, Position position) {
+        TextDocumentPositionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/declaration", std::move(params));
+    }
+    RequestID References(DocumentUri uri, Position position) {
+        ReferenceParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/references", std::move(params));
+    }
+    RequestID SwitchSourceHeader(DocumentUri uri) {
+        TextDocumentIdentifier params;
+        params.uri = std::move(uri);
+        return SendRequest("textDocument/references", std::move(params));
+    }
+    RequestID Rename(DocumentUri uri, Position position, string_ref newName) {
+        RenameParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        params.newName = newName;
+        return SendRequest("textDocument/references", std::move(params));
+    }
+    RequestID Hover(DocumentUri uri, Position position) {
+        TextDocumentPositionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/hover", std::move(params));
+    }
+    RequestID DocumentSymbol(DocumentUri uri, Position position) {
+        DocumentSymbolParams params;
+        params.textDocument.uri = std::move(uri);
+        return SendRequest("textDocument/documentSymbol", std::move(params));
+    }
+    RequestID DocumentHighlight(DocumentUri uri, Position position) {
+        TextDocumentPositionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/documentHighlight", std::move(params));
+    }
+    RequestID SymbolInfo(DocumentUri uri, Position position) {
+        TextDocumentPositionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/symbolInfo", std::move(params));
+    }
+    RequestID TypeHierarchy(DocumentUri uri, Position position, TypeHierarchyDirection direction, int resolve) {
+        TypeHierarchyParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        params.direction = direction;
+        params.resolve = resolve;
+        return SendRequest("textDocument/typeHierarchy", std::move(params));
+    }
+    RequestID WorkspaceSymbol(string_ref query) {
+        WorkspaceSymbolParams params;
+        params.query = query;
+        return SendRequest("workspace/symbol", std::move(params));
+    }
+    RequestID ExecuteCommand(string_ref cmd, option<TweakArgs> tweakArgs = {}, option<WorkspaceEdit> workspaceEdit = {}) {
+        ExecuteCommandParams params;
+        params.tweakArgs = tweakArgs;
+        params.workspaceEdit = workspaceEdit;
+        params.command = cmd;
+        return SendRequest("workspace/executeCommand", std::move(params));
+    }
+    RequestID DidChangeWatchedFiles(std::vector<FileEvent> &changes) {
+        DidChangeWatchedFilesParams params;
+        params.changes = std::move(changes);
+        return SendRequest("workspace/didChangeWatchedFiles", std::move(params));
+    }
+    RequestID DidChangeConfiguration(ConfigurationSettings &settings) {
+        DidChangeConfigurationParams params;
+        params.settings = std::move(settings);
+        return SendRequest("workspace/didChangeConfiguration", std::move(params));
     }
 
 public:

@@ -8,7 +8,6 @@
 
 #ifndef LSP_PROTOCOL_H
 #define LSP_PROTOCOL_H
-#include <bitset>
 #include <string>
 #include <vector>
 #include <tuple>
@@ -63,7 +62,7 @@ struct URIForFile {
     inline std::string &str() { return file; }
 };
 JSON_SERIALIZE(URIForFile, {j = value.file;}, {});
-using DocumentUri = std::string;
+using DocumentUri = string_ref;
 struct TextDocumentIdentifier {
     /// The text document's URI.
     DocumentUri uri;
