@@ -57,11 +57,6 @@ public:
     constexpr option() = default;
     option(const T &y) : fStorage(y), fHas(true) {}
     option(T &&y) : fStorage(std::move(y)), fHas(true) {}
-    option &operator=(const option &v) {
-        fStorage = v.fStorage;
-        fHas = v.fHas;
-        return *this;
-    }
     option &operator=(T &&v) {
         fStorage = std::move(v);
         fHas = true;
@@ -87,18 +82,17 @@ namespace nlohmann {
     template <typename T>
     struct adl_serializer<option<T>> {
         static void to_json(json& j, const option<T>& opt) {
-            if (!opt.has()) {
-                j = nullptr;
+            if (opt.has()) {
+                j = opt.value();
             } else {
-                j = *opt;
+                j = nullptr;
             }
         }
         static void from_json(const json& j, option<T>& opt) {
             if (j.is_null()) {
                 opt = {};
             } else {
-                opt = j.get<T>(); // same as above, but with
-                // adl_serializer<T>::from_json
+                opt = j.get<T>();
             }
         }
     };

@@ -4,8 +4,6 @@
 
 #ifndef LSP_CLIENT_H
 #define LSP_CLIENT_H
-#include <utility>
-
 #include "transport.h"
 #include "windows.h"
 #include "protocol.h"

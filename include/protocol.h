@@ -636,6 +636,7 @@ struct CodeAction {
     /// and a command, first the edit is executed and then the command.
     option<Command> command;
 };
+JSON_SERIALIZE(CodeAction, MAP_JSON(MAP_KEY(title), MAP_KEY(kind), MAP_KEY(diagnostics), MAP_KEY(edit), MAP_KEY(command)), {});
 
 struct SymbolInformation {
     /// The name of this symbol.
