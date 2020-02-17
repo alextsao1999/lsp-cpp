@@ -611,10 +611,10 @@ struct ExecuteCommandParams {
 };
 JSON_SERIALIZE(ExecuteCommandParams, MAP_JSON(MAP_KEY(command), MAP_KEY(workspaceEdit), MAP_KEY(tweakArgs)), {});
 
-struct Command : public ExecuteCommandParams {
+struct LspCommand : public ExecuteCommandParams {
     std::string title;
 };
-JSON_SERIALIZE(Command, MAP_JSON(MAP_KEY(command), MAP_KEY(workspaceEdit), MAP_KEY(tweakArgs), MAP_KEY(title)),
+JSON_SERIALIZE(LspCommand, MAP_JSON(MAP_KEY(command), MAP_KEY(workspaceEdit), MAP_KEY(tweakArgs), MAP_KEY(title)),
         {FROM_KEY(command);FROM_KEY(workspaceEdit);FROM_KEY(tweakArgs);FROM_KEY(title);});
 
 struct CodeAction {
@@ -632,7 +632,7 @@ struct CodeAction {
 
     /// A command this code action executes. If a code action provides an edit
     /// and a command, first the edit is executed and then the command.
-    option<Command> command;
+    option<LspCommand> command;
 };
 JSON_SERIALIZE(CodeAction, MAP_JSON(MAP_KEY(title), MAP_KEY(kind), MAP_KEY(diagnostics), MAP_KEY(edit), MAP_KEY(command)),
         {FROM_KEY(title);FROM_KEY(kind);FROM_KEY(diagnostics);FROM_KEY(edit);FROM_KEY(command)});
@@ -696,12 +696,12 @@ struct CompletionContext {
     CompletionTriggerKind triggerKind = CompletionTriggerKind::Invoked;
     /// The trigger character (a single character) that has trigger code complete.
     /// Is undefined if `triggerKind !== CompletionTriggerKind.TriggerCharacter`
-    TextType triggerCharacter;
+    option<TextType> triggerCharacter;
 };
 JSON_SERIALIZE(CompletionContext, MAP_JSON(MAP_KEY(triggerKind), MAP_KEY(triggerCharacter)), {});
 
 struct CompletionParams : TextDocumentPositionParams {
-    CompletionContext context;
+    option<CompletionContext> context;
 };
 JSON_SERIALIZE(CompletionParams, MAP_JSON(MAP_KEY(context), MAP_KEY(textDocument), MAP_KEY(position)), {});
 

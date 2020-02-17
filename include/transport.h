@@ -7,6 +7,7 @@
 
 #include "uri.h"
 #include <functional>
+#include <utility>
 using value = json;
 using RequestID = int;
 
@@ -23,6 +24,7 @@ class MapMessageHandler : public MessageHandler {
 public:
     std::map<std::string, std::function<void(value &, RequestID)>> m_calls;
     std::map<std::string, std::function<void(value &)>> m_notify;
+    std::vector<std::pair<RequestID, std::function<void(value &)>>> m_requests;
     MapMessageHandler() = default;
     template<typename Param>
     void bindRequest(const char *method, std::function<void(Param &, RequestID)> func) {
@@ -31,6 +33,9 @@ public:
             func(param, id.get<RequestID>());
         };
     }
+    void bindRequest(const char *method, std::function<void(value &, RequestID)> func) {
+        m_calls[method] = std::move(func);
+    }
     template<typename Param>
     void bindNotify(const char *method, std::function<void(Param &)> func) {
         m_notify[method] = [=](json &params) {
@@ -38,7 +43,12 @@ public:
             func(param);
         };
     }
-
+    void bindNotify(const char *method, std::function<void(value &)> func) {
+        m_notify[method] = std::move(func);
+    }
+    void bindResponse(RequestID id, std::function<void(value &)>func) {
+        m_requests.emplace_back(id, std::move(func));
+    }
     void onNotify(string_ref method, value &params) override {
         std::string str = method.str();
         if (m_notify.count(str)) {
@@ -46,7 +56,13 @@ public:
         }
     }
     void onResponse(value &ID, value &result) override {
-
+        for (int i = 0; i < m_requests.size(); ++i) {
+            if (ID == m_requests[i].first) {
+                m_requests[i].second(result);
+                m_requests.erase(m_requests.begin() + i);
+                return;
+            }
+        }
     }
     void onError(value &ID, value &error) override {
 

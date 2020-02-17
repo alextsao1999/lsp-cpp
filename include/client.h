@@ -14,10 +14,10 @@ public:
         SECURITY_ATTRIBUTES sa = {0};
         sa.nLength = sizeof(SECURITY_ATTRIBUTES);
         sa.bInheritHandle = true;
-        if (!CreatePipe(&fReadIn, &fWriteIn, &sa, 1024 * 1024)) {
+        if (!CreatePipe(&fReadIn, &fWriteIn, &sa, 0)) {
             printf("Create In Pipe error\n");
         }
-        if (!CreatePipe(&fReadOut, &fWriteOut, &sa, 1024 * 1024)) {
+        if (!CreatePipe(&fReadOut, &fWriteOut, &sa, 0)) {
             printf("Create Out Pipe error\n");
         }
         STARTUPINFO si = {0};
@@ -26,7 +26,7 @@ public:
         si.hStdOutput = fWriteOut;
         si.dwFlags = STARTF_USESTDHANDLES;
         PROCESS_INFORMATION pi = {nullptr};
-        if (!CreateProcessA(0, (char *) fCommandLine, 0, 0, TRUE, CREATE_NO_WINDOW, 0, 0, &si, &pi)){
+        if (!CreateProcessA(0, (char *) fCommandLine, 0, 0, TRUE, CREATE_NO_WINDOW, 0, 0, (LPSTARTUPINFOA)&si, &pi)){
             printf("Create Process error\n");
         }
         fProcess = pi.hProcess;
@@ -38,9 +38,11 @@ public:
         CloseHandle(fWriteOut);
         CloseHandle(fProcess);
     }
-    RequestID Initialize() {
+
+    RequestID Initialize(option<DocumentUri> rootUri) {
         InitializeParams params;
         params.processId = GetCurrentProcessId();
+        params.rootUri = rootUri;
         return SendRequest("initialize", params);
     }
     RequestID Shutdown() {
@@ -51,6 +53,9 @@ public:
     }
     void Exit() {
         SendNotify("exit");
+    }
+    void Initialized() {
+        SendNotify("initialized");
     }
     RequestID RegisterCapability() {
         return SendRequest("client/registerCapability");
@@ -100,12 +105,12 @@ public:
         params.context = std::move(context);
         return SendRequest("textDocument/codeAction", std::move(params));
     }
-    RequestID Completion(DocumentUri uri, Position position, CompletionContext context) {
+    RequestID Completion(DocumentUri uri, Position position, option<CompletionContext> context = option<CompletionContext>()) {
         CompletionParams params;
         params.textDocument.uri = std::move(uri);
         params.position = position;
-        params.context = std::move(context);
-        return SendRequest("textDocument/completion", std::move(params));
+        params.context = context;
+        return SendRequest("textDocument/completion", params);
     }
     RequestID SignatureHelp(DocumentUri uri, Position position) {
         TextDocumentPositionParams params;
@@ -149,9 +154,11 @@ public:
         params.position = position;
         return SendRequest("textDocument/hover", std::move(params));
     }
-    RequestID DocumentSymbol(DocumentUri uri, Position position) {
+
+    RequestID DocumentSymbol(DocumentUri uri) {
         DocumentSymbolParams params;
         params.textDocument.uri = std::move(uri);
+
         return SendRequest("textDocument/documentSymbol", std::move(params));
     }
     RequestID DocumentHighlight(DocumentUri uri, Position position) {
@@ -261,14 +268,14 @@ public:
     }
 
 public:
-    void request(string_ref method, value &params, RequestID id) {
+    void request(string_ref method, value &params, RequestID id) override {
         json rpc = {{"jsonrpc", jsonrpc},
                     {"id",      id},
                     {"method",  method},
                     {"params",  params}};
         writeJson(rpc);
     }
-    void notify(string_ref method, value &params) {
+    void notify(string_ref method, value &params) override {
         json value = {{"jsonrpc", jsonrpc},
                       {"method",  method},
                       {"params",  params}};
