@@ -8,4 +8,3 @@ include_directories(src)
 aux_source_directory(src/ sources)
 set(lsp_include_dirs ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE INTERNAL "" )
 add_executable(LspClientTest ${sources})
-
