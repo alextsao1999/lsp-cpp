@@ -5,8 +5,8 @@
 #ifndef LSP_CLIENT_H
 #define LSP_CLIENT_H
 #include "transport.h"
-#include "windows.h"
 #include "protocol.h"
+#include "windows.h"
 
 class LanguageClient : public JsonTransport {
 public:
@@ -55,7 +55,6 @@ public:
     RequestID RegisterCapability() {
         return SendRequest("client/registerCapability");
     }
-
     void DidOpen(DocumentUri uri, string_ref text) {
         DidOpenTextDocumentParams params;
         params.textDocument.uri = std::move(uri);
@@ -82,7 +81,7 @@ public:
         params.range = range;
         return SendRequest("textDocument/rangeFormatting", params);
     }
-    RequestID OnTypeFormatting(DocumentUri uri, Position position, std::string ch) {
+    RequestID OnTypeFormatting(DocumentUri uri, Position position, string_ref ch) {
         DocumentOnTypeFormattingParams params;
         params.textDocument.uri = std::move(uri);
         params.position = position;
@@ -142,7 +141,7 @@ public:
         params.textDocument.uri = std::move(uri);
         params.position = position;
         params.newName = newName;
-        return SendRequest("textDocument/references", std::move(params));
+        return SendRequest("textDocument/rename", std::move(params));
     }
     RequestID Hover(DocumentUri uri, Position position) {
         TextDocumentPositionParams params;
@@ -291,6 +290,5 @@ private:
     HANDLE fProcess = nullptr;
 
 };
-
 
 #endif //LSP_CLIENT_H

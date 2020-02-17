@@ -3,14 +3,19 @@
 #include "client.h"
 int main() {
     LanguageClient client(R"(F:\LLVM\bin\clangd.exe)");
-    MessageHandler my;
+    MapMessageHandler my;
+
+    my.bindNotify<ShowMessageParams>("window/showMessage", [](auto &params) {
+        printf("message -> %s\n", params.message.c_str());
+    });
+
     std::thread thread([&] {
         client.loop(my);
     });
 
-    auto *file = "file:///C:/Users/Administrator/Desktop/compiler4e/runtime.c";
+    string_ref file = "file:///C:/Users/Administrator/Desktop/test.c";
 
-    std::string text = "int main() {\n return 0; }";
+    std::string text = "int main() { return 0; }\n";
     int res;
     while (scanf("%d", &res)) {
         if (res == 1) {
@@ -23,6 +28,10 @@ int main() {
         }
         if (res == 3) {
             client.DidOpen(file, text);
+            client.Sync();
+        }
+        if (res == 4) {
+            client.Formatting(file);
         }
     }
     return 0;

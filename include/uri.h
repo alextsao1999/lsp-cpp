@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include "json.hpp"
+using json = nlohmann::json;
 class string_ref {
 public:
     static const size_t npos = ~size_t(0);
@@ -28,6 +29,9 @@ public:
     inline bool operator==(const string_ref &ref) const {
         return m_length == ref.m_length && strcmp(m_ref, ref.m_ref) == 0;
     }
+    inline bool operator==(const char *ref) const {
+        return strcmp(m_ref, ref) == 0;
+    }
     inline bool operator>(const string_ref &ref) const { return m_length > ref.m_length; }
     inline bool operator<(const string_ref &ref) const { return m_length < ref.m_length; }
     inline const char *c_str() const { return m_ref; }
@@ -38,14 +42,6 @@ public:
     inline size_t size() const { return m_length; }
     char front() const { return m_ref[0]; }
     char back() const { return m_ref[m_length - 1]; }
-    template <typename Allocator = std::allocator<char>>
-    string_ref copy(Allocator &A = Allocator()) const {
-        if (empty())
-            return {};
-        char *S = A.allocate(m_length);
-        std::copy(begin(), end(), S);
-        return string_ref(S, m_length);
-    }
     char operator[](size_t index) const { return m_ref[index]; }
 
 };
@@ -90,15 +86,30 @@ namespace nlohmann {
         }
         static void from_json(const json& j, option<T>& opt) {
             if (j.is_null()) {
-                opt = {};
+                opt = option<T>();
             } else {
-                opt = j.get<T>();
+                opt = option<T>(j.get<T>());
             }
         }
     };
 }
-struct URI {
 
+struct URIForFile {
+    std::string file;
+    explicit operator bool() const { return !file.empty(); }
+    friend bool operator==(const URIForFile &LHS, const URIForFile &RHS) {
+        return LHS.file == RHS.file;
+    }
+    friend bool operator!=(const URIForFile &LHS, const URIForFile &RHS) {
+        return !(LHS == RHS);
+    }
+    friend bool operator<(const URIForFile &LHS, const URIForFile &RHS) {
+        return LHS.file < RHS.file;
+    }
+    URIForFile(const char *str) : file(str) {}
+    URIForFile() = default;
+    inline std::string &str() { return file; }
 };
+using DocumentUri = string_ref;
 
 #endif //LSP_URI_H

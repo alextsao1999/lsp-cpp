@@ -12,7 +12,7 @@
 #include <vector>
 #include <tuple>
 #include <map>
-#include "common.h"
+#include "uri.h"
 #define MAP_JSON(...) {j = {__VA_ARGS__};}
 #define MAP_KEY(KEY) {#KEY, value.KEY}
 #define MAP_TO(KEY, TO) {KEY, value.TO}
@@ -25,6 +25,7 @@
             static void from_json(const json& j, Type& value) FROM \
         }; \
     }
+using TextType = string_ref;
 enum class ErrorCode {
     // Defined by JSON RPC.
     ParseError = -32700,
@@ -39,30 +40,13 @@ enum class ErrorCode {
 };
 class LSPError {
 public:
-    std::string Message;
+    TextType Message;
     ErrorCode Code;
     static char ID;
-    LSPError(std::string Message, ErrorCode Code)
+    LSPError(TextType Message, ErrorCode Code)
             : Message(std::move(Message)), Code(Code) {}
 };
-struct URIForFile {
-    std::string file;
-    explicit operator bool() const { return !file.empty(); }
-    friend bool operator==(const URIForFile &LHS, const URIForFile &RHS) {
-        return LHS.file == RHS.file;
-    }
-    friend bool operator!=(const URIForFile &LHS, const URIForFile &RHS) {
-        return !(LHS == RHS);
-    }
-    friend bool operator<(const URIForFile &LHS, const URIForFile &RHS) {
-        return LHS.file < RHS.file;
-    }
-    URIForFile(const char *str) : file(str) {}
-    URIForFile() = default;
-    inline std::string &str() { return file; }
-};
-JSON_SERIALIZE(URIForFile, {j = value.file;}, {});
-using DocumentUri = string_ref;
+JSON_SERIALIZE(URIForFile, {j = value.file;}, {value.file = j.get<std::string>();});
 struct TextDocumentIdentifier {
     /// The text document's URI.
     DocumentUri uri;
@@ -92,7 +76,7 @@ struct Position {
                std::tie(RHS.line, RHS.character);
     }
 };
-JSON_SERIALIZE(Position, MAP_JSON(MAP_KEY(line), MAP_KEY(character)), {});
+JSON_SERIALIZE(Position, MAP_JSON(MAP_KEY(line), MAP_KEY(character)), {FROM_KEY(line);FROM_KEY(character)});
 
 struct Range {
     /// The range's start position.
@@ -115,11 +99,11 @@ struct Range {
         return start <= Rng.start && Rng.end <= end;
     }
 };
-JSON_SERIALIZE(Range, MAP_JSON(MAP_KEY(start), MAP_KEY(end)), {});
+JSON_SERIALIZE(Range, MAP_JSON(MAP_KEY(start), MAP_KEY(end)), {FROM_KEY(start);FROM_KEY(end)});
 
 struct Location {
     /// The text document's URI.
-    DocumentUri uri;
+    std::string uri;
     Range range;
 
     friend bool operator==(const Location &LHS, const Location &RHS) {
@@ -132,7 +116,7 @@ struct Location {
         return std::tie(LHS.uri, LHS.range) < std::tie(RHS.uri, RHS.range);
     }
 };
-JSON_SERIALIZE(Location, MAP_JSON(MAP_KEY(uri), MAP_KEY(range)), {});
+JSON_SERIALIZE(Location, MAP_JSON(MAP_KEY(uri), MAP_KEY(range)), {FROM_KEY(uri);FROM_KEY(range)});
 
 struct TextEdit {
     /// The range of the text document to be manipulated. To insert
@@ -143,20 +127,20 @@ struct TextEdit {
     /// empty string.
     std::string newText;
 };
-JSON_SERIALIZE(TextEdit, MAP_JSON(MAP_KEY(range), MAP_KEY(newText)), {});
+JSON_SERIALIZE(TextEdit, MAP_JSON(MAP_KEY(range), MAP_KEY(newText)), {FROM_KEY(range);FROM_KEY(newText);});
 
 struct TextDocumentItem {
     /// The text document's URI.
     DocumentUri uri;
 
     /// The text document's language identifier.
-    std::string languageId;
+    string_ref languageId;
 
     /// The version number of this document (it will strictly increase after each
     int version = 0;
 
     /// The content of the opened text document.
-    std::string text;
+    string_ref text;
 };
 JSON_SERIALIZE(TextDocumentItem, MAP_JSON(
                 MAP_KEY(uri), MAP_KEY(languageId), MAP_KEY(version), MAP_KEY(text)), {});
@@ -330,8 +314,8 @@ JSON_SERIALIZE(ClientCapabilities,MAP_JSON(
             MAP_TO("offsetEncoding", offsetEncoding)), {});
 
 struct ClangdCompileCommand {
-    std::string workingDirectory;
-    std::vector<std::string> compilationCommand;
+    TextType workingDirectory;
+    std::vector<TextType> compilationCommand;
 };
 JSON_SERIALIZE(ClangdCompileCommand,MAP_JSON(
         MAP_KEY(workingDirectory), MAP_KEY(compilationCommand)), {});
@@ -339,7 +323,7 @@ JSON_SERIALIZE(ClangdCompileCommand,MAP_JSON(
 struct ConfigurationSettings {
     // Changes to the in-memory compilation database.
     // The key of the map is a file name.
-    std::map<std::string, ClangdCompileCommand> compilationDatabaseChanges;
+    std::map<TextType, ClangdCompileCommand> compilationDatabaseChanges;
 };
 JSON_SERIALIZE(ConfigurationSettings,MAP_JSON(MAP_KEY(compilationDatabaseChanges)), {});
 
@@ -348,11 +332,11 @@ struct InitializationOptions {
     // also set through the initialize request (initializationOptions field).
     ConfigurationSettings configSettings;
 
-    option<std::string> compilationDatabasePath;
+    option<TextType> compilationDatabasePath;
     // Additional flags to be included in the "fallback command" used when
     // the compilation database doesn't describe an opened file.
     // The command used will be approximately `clang $FILE $fallbackFlags`.
-    std::vector<std::string> fallbackFlags;
+    std::vector<TextType> fallbackFlags;
 
     /// Clients supports show file status for textDocument/clangd.fileStatus.
     bool clangdFileStatus = false;
@@ -364,10 +348,10 @@ JSON_SERIALIZE(InitializationOptions, MAP_JSON(
                 MAP_KEY(clangdFileStatus)), {});
 
 struct InitializeParams {
-    u_long processId = 0;
+    unsigned processId = 0;
     ClientCapabilities capabilities;
     option<DocumentUri> rootUri;
-    option<std::string> rootPath;
+    option<TextType> rootPath;
     InitializationOptions initializationOptions;
 };
 JSON_SERIALIZE(InitializeParams, MAP_JSON(
@@ -400,11 +384,11 @@ struct Registration {
      * The id used to register the request. The id can be used to deregister
      * the request again.
      */
-    std::string id;
+    TextType id;
     /**
      * The method / capability to register for.
      */
-    std::string method;
+    TextType method;
 };
 JSON_SERIALIZE(Registration, MAP_JSON(MAP_KEY(id), MAP_KEY(method)), {});
 
@@ -437,7 +421,7 @@ struct TextDocumentContentChangeEvent {
     /// The length of the range that got replaced.
     option<int> rangeLength;
     /// The new text of the range/document.
-    std::string text;
+    TextType text;
 };
 JSON_SERIALIZE(TextDocumentContentChangeEvent, MAP_JSON(MAP_KEY(range), MAP_KEY(rangeLength), MAP_KEY(text)), {});
 
@@ -502,7 +486,7 @@ struct DocumentOnTypeFormattingParams {
     Position position;
 
     /// The character that has been typed.
-    std::string ch;
+    TextType ch;
 };
 JSON_SERIALIZE(DocumentOnTypeFormattingParams, MAP_JSON(MAP_KEY(textDocument), MAP_KEY(position), MAP_KEY(ch)), {});
 
@@ -524,7 +508,7 @@ struct DiagnosticRelatedInformation {
     /// The message of this related diagnostic information.
     std::string message;
 };
-JSON_SERIALIZE(DiagnosticRelatedInformation, MAP_JSON(MAP_KEY(location), MAP_KEY(message)), {});
+JSON_SERIALIZE(DiagnosticRelatedInformation, MAP_JSON(MAP_KEY(location), MAP_KEY(message)), {FROM_KEY(location);FROM_KEY(message);});
 struct CodeAction;
 
 struct Diagnostic {
@@ -567,7 +551,20 @@ JSON_SERIALIZE(Diagnostic, MAP_JSON(
         MAP_KEY(message),
         MAP_KEY(relatedInformation),
         MAP_KEY(category),
-        MAP_KEY(codeActions)), {});
+        MAP_KEY(codeActions)),{FROM_KEY(range);FROM_KEY(code);FROM_KEY(source);FROM_KEY(message);
+                FROM_KEY(relatedInformation);FROM_KEY(category);FROM_KEY(codeActions);});
+
+struct PublishDiagnosticsParams {
+    /**
+     * The URI for which diagnostic information is reported.
+     */
+    std::string uri;
+    /**
+	 * An array of diagnostic information items.
+	 */
+    std::vector<Diagnostic> diagnostics;
+};
+JSON_SERIALIZE(PublishDiagnosticsParams, {}, {FROM_KEY(uri);FROM_KEY(diagnostics);});
 
 struct CodeActionContext {
     /// An array of diagnostics.
@@ -594,17 +591,17 @@ struct WorkspaceEdit {
     /// Note: "documentChanges" is not currently used because currently there is
     /// no support for versioned edits.
 };
-JSON_SERIALIZE(WorkspaceEdit, MAP_JSON(MAP_KEY(changes)), {});
+JSON_SERIALIZE(WorkspaceEdit, MAP_JSON(MAP_KEY(changes)), {FROM_KEY(changes);});
 
 struct TweakArgs {
     /// A file provided by the client on a textDocument/codeAction request.
-    DocumentUri file;
+    std::string file;
     /// A selection provided by the client on a textDocument/codeAction request.
     Range selection;
     /// ID of the tweak that should be executed. Corresponds to Tweak::id().
     std::string tweakID;
 };
-JSON_SERIALIZE(TweakArgs, MAP_JSON(MAP_KEY(file), MAP_KEY(selection), MAP_KEY(tweakID)), {});
+JSON_SERIALIZE(TweakArgs, MAP_JSON(MAP_KEY(file), MAP_KEY(selection), MAP_KEY(tweakID)), {FROM_KEY(file);FROM_KEY(selection);FROM_KEY(tweakID);});
 
 struct ExecuteCommandParams {
     std::string command;
@@ -617,7 +614,8 @@ JSON_SERIALIZE(ExecuteCommandParams, MAP_JSON(MAP_KEY(command), MAP_KEY(workspac
 struct Command : public ExecuteCommandParams {
     std::string title;
 };
-JSON_SERIALIZE(Command, MAP_JSON(MAP_KEY(command), MAP_KEY(workspaceEdit), MAP_KEY(tweakArgs), MAP_KEY(title)), {});
+JSON_SERIALIZE(Command, MAP_JSON(MAP_KEY(command), MAP_KEY(workspaceEdit), MAP_KEY(tweakArgs), MAP_KEY(title)),
+        {FROM_KEY(command);FROM_KEY(workspaceEdit);FROM_KEY(tweakArgs);FROM_KEY(title);});
 
 struct CodeAction {
     /// A short, human-readable, title for this code action.
@@ -636,37 +634,36 @@ struct CodeAction {
     /// and a command, first the edit is executed and then the command.
     option<Command> command;
 };
-JSON_SERIALIZE(CodeAction, MAP_JSON(MAP_KEY(title), MAP_KEY(kind), MAP_KEY(diagnostics), MAP_KEY(edit), MAP_KEY(command)), {});
+JSON_SERIALIZE(CodeAction, MAP_JSON(MAP_KEY(title), MAP_KEY(kind), MAP_KEY(diagnostics), MAP_KEY(edit), MAP_KEY(command)),
+        {FROM_KEY(title);FROM_KEY(kind);FROM_KEY(diagnostics);FROM_KEY(edit);FROM_KEY(command)});
 
 struct SymbolInformation {
     /// The name of this symbol.
     std::string name;
-
     /// The kind of this symbol.
-    SymbolKind kind;
-
+    SymbolKind kind = SymbolKind::Class;
     /// The location of this symbol.
     Location location;
-
     /// The name of the symbol containing this symbol.
     std::string containerName;
 };
-JSON_SERIALIZE(SymbolInformation, MAP_JSON(MAP_KEY(name), MAP_KEY(kind), MAP_KEY(location), MAP_KEY(containerName)), {});
+JSON_SERIALIZE(SymbolInformation, MAP_JSON(MAP_KEY(name), MAP_KEY(kind), MAP_KEY(location), MAP_KEY(containerName)), {FROM_KEY(name);FROM_KEY(kind);FROM_KEY(location);FROM_KEY(containerName)});
+
 struct SymbolDetails {
-    std::string name;
-    std::string containerName;
+    TextType name;
+    TextType containerName;
     /// Unified Symbol Resolution identifier
     /// This is an opaque string uniquely identifying a symbol.
     /// Unlike SymbolID, it is variable-length and somewhat human-readable.
     /// It is a common representation across several clang tools.
     /// (See USRGeneration.h)
-    std::string USR;
-    option<std::string> ID;
+    TextType USR;
+    option<TextType> ID;
 };
 
 struct WorkspaceSymbolParams {
     /// A non-empty query string
-    std::string query;
+    TextType query;
 };
 JSON_SERIALIZE(WorkspaceSymbolParams, MAP_JSON(MAP_KEY(query)), {});
 
@@ -699,7 +696,7 @@ struct CompletionContext {
     CompletionTriggerKind triggerKind = CompletionTriggerKind::Invoked;
     /// The trigger character (a single character) that has trigger code complete.
     /// Is undefined if `triggerKind !== CompletionTriggerKind.TriggerCharacter`
-    std::string triggerCharacter;
+    TextType triggerCharacter;
 };
 JSON_SERIALIZE(CompletionContext, MAP_JSON(MAP_KEY(triggerKind), MAP_KEY(triggerCharacter)), {});
 
@@ -712,6 +709,8 @@ struct MarkupContent {
     MarkupKind kind = MarkupKind::PlainText;
     std::string value;
 };
+JSON_SERIALIZE(MarkupContent, {}, {FROM_KEY(kind);FROM_KEY(value)});
+
 struct Hover {
     /// The hover's content
     MarkupContent contents;
@@ -720,6 +719,8 @@ struct Hover {
     /// that is used to visualize a hover, e.g. by changing the background color.
     option<Range> range;
 };
+JSON_SERIALIZE(Hover, {}, {FROM_KEY(contents);FROM_KEY(range)});
+
 enum class InsertTextFormat {
     Missing = 0,
     /// The primary text to be inserted is treated as a plain string.
@@ -930,7 +931,7 @@ struct FileStatus {
     DocumentUri uri;
     /// The human-readable string presents the current state of the file, can be
     /// shown in the UI (e.g. status bar).
-    std::string state;
+    TextType state;
     // FIXME: add detail messages.
 };
 
