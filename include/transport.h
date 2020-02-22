@@ -9,7 +9,7 @@
 #include <functional>
 #include <utility>
 using value = json;
-using RequestID = int;
+using RequestID = std::string;
 
 class MessageHandler {
 public:
@@ -78,7 +78,7 @@ public:
 class Transport {
 public:
     virtual void notify(string_ref method, value &params) = 0;
-    virtual void request(string_ref method, value &params, RequestID id) = 0;
+    virtual void request(string_ref method, value &params, RequestID &id) = 0;
     virtual int loop(MessageHandler &) = 0;
 };
 
@@ -88,21 +88,38 @@ public:
     int loop(MessageHandler &handler) override {
         value value;
         while (readJson(value)) {
-            if (value.count("id")) {
-                if (value.contains("method")) {
-                    handler.onRequest(value["method"].get<std::string>(), value["params"], value["id"]);
-                } else if (value.contains("result")) {
-                    handler.onResponse(value["id"], value["result"]);
-                } else if (value.contains("error")) {
-                    handler.onError(value["id"], value["error"]);
+            try {
+                if (value.count("id")) {
+                    if (value.contains("method")) {
+                        handler.onRequest(value["method"].get<std::string>(), value["params"], value["id"]);
+                    } else if (value.contains("result")) {
+                        handler.onResponse(value["id"], value["result"]);
+                    } else if (value.contains("error")) {
+                        handler.onError(value["id"], value["error"]);
+                    }
+                } else if (value.contains("method")) {
+                    if (value.contains("params")) {
+                        handler.onNotify(value["method"].get<std::string>(), value["params"]);
+                    }
                 }
-            } else if (value.contains("method")) {
-                if (value.contains("params")) {
-                    handler.onNotify(value["method"].get<std::string>(), value["params"]);
-                }
+            } catch (std::exception &e) {
+                printf("error -> %s\n", e.what());
             }
         }
         return 0;
+    }
+    void notify(string_ref method, value &params) override {
+        json value = {{"jsonrpc", jsonrpc},
+                      {"method",  method},
+                      {"params",  params}};
+        writeJson(value);
+    }
+    void request(string_ref method, value &params, RequestID &id) override {
+        json rpc = {{"jsonrpc", jsonrpc},
+                    {"id",      id},
+                    {"method",  method},
+                    {"params",  params}};
+        writeJson(rpc);
     }
     virtual bool readJson(value &) = 0;
     virtual bool writeJson(value &) = 0;

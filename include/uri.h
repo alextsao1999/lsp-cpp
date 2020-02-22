@@ -20,7 +20,8 @@ private:
     const char *m_ref = nullptr;
     size_t m_length = 0;
 public:
-    string_ref() : m_ref(nullptr), m_length(0) {}
+    constexpr string_ref() : m_ref(nullptr), m_length(0) {}
+    constexpr string_ref(std::nullptr_t) : m_ref(nullptr), m_length(0) {}
     constexpr string_ref(const char *ref, size_t mLength) : m_ref(ref), m_length(mLength) {}
     string_ref(const char *ref) : m_ref(ref), m_length(strlen(ref)) {}
     string_ref(const std::string &string) : m_ref(string.c_str()), m_length(string.length()) {}
@@ -48,7 +49,7 @@ public:
 template <typename T>
 class option {
 public:
-    T fStorage;
+    T fStorage = T();
     bool fHas = false;
     constexpr option() = default;
     option(const T &y) : fStorage(y), fHas(true) {}
@@ -94,8 +95,34 @@ namespace nlohmann {
     };
 }
 
+inline uint8_t ToHex(uint8_t ch) {
+    return  ch > 9 ? ch + 55 : ch + 48;
+}
+
 struct URIForFile {
     std::string file;
+    static std::string UriEncode(string_ref ref) {
+        static char symbol[] = "._-*/:";
+        std::string result;
+        for (uint8_t ch : ref) {
+            if (ch == '\\') {
+                ch = '/';
+            }
+            if (std::isalnum(ch) || strchr(symbol, ch)) {
+                if (ch == '/' && result.back() == '/') {
+                    continue;
+                }
+                result += ch;
+            } else if (ch == ' ') {
+                result += '+';
+            } else {
+                result += '%';
+                result += ToHex((uint8_t) ch >> 4);
+                result += ToHex((uint8_t) ch % 16);
+            }
+        }
+        return std::move(result);
+    }
     explicit operator bool() const { return !file.empty(); }
     friend bool operator==(const URIForFile &LHS, const URIForFile &RHS) {
         return LHS.file == RHS.file;
@@ -106,7 +133,10 @@ struct URIForFile {
     friend bool operator<(const URIForFile &LHS, const URIForFile &RHS) {
         return LHS.file < RHS.file;
     }
-    URIForFile(const char *str) : file(str) {}
+    void from(string_ref path) {
+        file = "file:///" + UriEncode(path);
+    }
+    explicit URIForFile(const char *str) : file(str) {}
     URIForFile() = default;
     inline std::string &str() { return file; }
 };

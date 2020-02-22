@@ -10,14 +10,14 @@
 
 class LanguageClient : public JsonTransport {
 public:
-    explicit LanguageClient(const char *fCommandLine) : fCommandLine(fCommandLine) {
+    explicit LanguageClient(const char *exec, char *cmd = nullptr) {
         SECURITY_ATTRIBUTES sa = {0};
         sa.nLength = sizeof(SECURITY_ATTRIBUTES);
         sa.bInheritHandle = true;
-        if (!CreatePipe(&fReadIn, &fWriteIn, &sa, 0)) {
+        if (!CreatePipe(&fReadIn, &fWriteIn, &sa, 1024 * 1024)) {
             printf("Create In Pipe error\n");
         }
-        if (!CreatePipe(&fReadOut, &fWriteOut, &sa, 0)) {
+        if (!CreatePipe(&fReadOut, &fWriteOut, &sa, 1024 * 1024)) {
             printf("Create Out Pipe error\n");
         }
         STARTUPINFO si = {0};
@@ -25,21 +25,20 @@ public:
         si.hStdInput = fReadIn;
         si.hStdOutput = fWriteOut;
         si.dwFlags = STARTF_USESTDHANDLES;
-        PROCESS_INFORMATION pi = {nullptr};
-        if (!CreateProcessA(0, (char *) fCommandLine, 0, 0, TRUE, CREATE_NO_WINDOW, 0, 0, (LPSTARTUPINFOA)&si, &pi)){
+        if (!CreateProcessA(exec, cmd, 0, 0, TRUE, CREATE_NO_WINDOW, 0, 0, (LPSTARTUPINFOA) &si, &fProcess)) {
             printf("Create Process error\n");
         }
-        fProcess = pi.hProcess;
     }
     ~LanguageClient() {
         CloseHandle(fReadIn);
         CloseHandle(fWriteIn);
         CloseHandle(fReadOut);
         CloseHandle(fWriteOut);
-        CloseHandle(fProcess);
+        CloseHandle(fProcess.hThread);
+        CloseHandle(fProcess.hProcess);
+        TerminateProcess(fProcess.hProcess, 0);
     }
-
-    RequestID Initialize(option<DocumentUri> rootUri) {
+    RequestID Initialize(option<DocumentUri> rootUri = {}) {
         InitializeParams params;
         params.processId = GetCurrentProcessId();
         params.rootUri = rootUri;
@@ -105,7 +104,7 @@ public:
         params.context = std::move(context);
         return SendRequest("textDocument/codeAction", std::move(params));
     }
-    RequestID Completion(DocumentUri uri, Position position, option<CompletionContext> context = option<CompletionContext>()) {
+    RequestID Completion(DocumentUri uri, Position position, option<CompletionContext> context = {}) {
         CompletionParams params;
         params.textDocument.uri = std::move(uri);
         params.position = position;
@@ -154,12 +153,15 @@ public:
         params.position = position;
         return SendRequest("textDocument/hover", std::move(params));
     }
-
     RequestID DocumentSymbol(DocumentUri uri) {
         DocumentSymbolParams params;
         params.textDocument.uri = std::move(uri);
-
         return SendRequest("textDocument/documentSymbol", std::move(params));
+    }
+    RequestID DocumentColor(DocumentUri uri) {
+        DocumentSymbolParams params;
+        params.textDocument.uri = std::move(uri);
+        return SendRequest("textDocument/documentColor", std::move(params));
     }
     RequestID DocumentHighlight(DocumentUri uri, Position position) {
         TextDocumentPositionParams params;
@@ -251,50 +253,39 @@ public:
         return true;
     }
     bool readJson(json &json) override {
-        printf("\n-------------------Listening-----------\n");
+        json.clear();
         int length = ReadLength();
         SkipLine();
         std::string read;
         Read(length, read);
-        json = json::parse(read);
-        printf("message:\n %s\n", read.c_str());
+        try {
+            json = json::parse(read);
+        } catch (std::exception &e) {
+            //printf("read error -> %s\nread -> %s\n ", e.what(), read.c_str());
+        }
+        //printf("message %d:\n%s\n", length, read.c_str());
         return true;
     }
     bool writeJson(json &json) override {
         std::string content = json.dump();
         std::string header = "Content-Length: " + std::to_string(content.length()) + "\r\n\r\n" + content;
-        printf("send:\n%s\n", content.c_str());
+        //printf("send:\n%s\n", content.c_str());
         return Write(header);
     }
 
 public:
-    void request(string_ref method, value &params, RequestID id) override {
-        json rpc = {{"jsonrpc", jsonrpc},
-                    {"id",      id},
-                    {"method",  method},
-                    {"params",  params}};
-        writeJson(rpc);
-    }
-    void notify(string_ref method, value &params) override {
-        json value = {{"jsonrpc", jsonrpc},
-                      {"method",  method},
-                      {"params",  params}};
-        writeJson(value);
-    }
     RequestID SendRequest(string_ref method, value params = json()) {
-        static RequestID id = 0;
+        RequestID id = method.str();
         request(method, params, id);
-        return id++;
+        return id;
     }
     void SendNotify(string_ref method, value params = json()) {
         notify(method, params);
     }
-
 private:
-    LPCSTR fCommandLine;
     HANDLE fReadIn = nullptr, fWriteIn = nullptr;
     HANDLE fReadOut = nullptr, fWriteOut = nullptr;
-    HANDLE fProcess = nullptr;
+    PROCESS_INFORMATION fProcess = {nullptr};
 
 };
 

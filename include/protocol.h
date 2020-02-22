@@ -17,7 +17,7 @@
 #define MAP_KEY(KEY) {#KEY, value.KEY}
 #define MAP_TO(KEY, TO) {KEY, value.TO}
 #define MAP_KV(K, ...) {K, {__VA_ARGS__}}
-#define FROM_KEY(KEY) j.at(#KEY).get_to(value.KEY);
+#define FROM_KEY(KEY) if (j.contains(#KEY)) j.at(#KEY).get_to(value.KEY);
 #define JSON_SERIALIZE(Type, TO, FROM) \
     namespace nlohmann { \
         template <> struct adl_serializer<Type> { \
@@ -52,6 +52,11 @@ struct TextDocumentIdentifier {
     DocumentUri uri;
 };
 JSON_SERIALIZE(TextDocumentIdentifier, MAP_JSON(MAP_KEY(uri)), {});
+
+struct VersionedTextDocumentIdentifier : public TextDocumentIdentifier {
+    int version = 0;
+};
+JSON_SERIALIZE(VersionedTextDocumentIdentifier, MAP_JSON(MAP_KEY(uri), MAP_KEY(version)), {});
 
 struct Position {
     /// Line position in a document (zero-based).
@@ -231,6 +236,17 @@ enum class MarkupKind {
     PlainText,
     Markdown,
 };
+enum class ResourceOperationKind {
+    Create,
+    Rename,
+    Delete
+};
+enum class FailureHandlingKind {
+    Abort,
+    Transactional,
+    Undo,
+    TextOnlyTransactional
+};
 NLOHMANN_JSON_SERIALIZE_ENUM(OffsetEncoding, {
     {OffsetEncoding::UnsupportedEncoding, "unspported"},
     {OffsetEncoding::UTF8, "utf-8"},
@@ -241,6 +257,18 @@ NLOHMANN_JSON_SERIALIZE_ENUM(MarkupKind, {
     {MarkupKind::PlainText, "plaintext"},
     {MarkupKind::Markdown, "markdown"},
 })
+NLOHMANN_JSON_SERIALIZE_ENUM(ResourceOperationKind, {
+    {ResourceOperationKind::Create, "create"},
+    {ResourceOperationKind::Rename, "rename"},
+    {ResourceOperationKind::Delete, "dename"}
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(FailureHandlingKind, {
+    {FailureHandlingKind::Abort, "abort"},
+    {FailureHandlingKind::Transactional, "transactional"},
+    {FailureHandlingKind::Undo, "undo"}
+    {FailureHandlingKind::TextOnlyTransactional, "textOnlyTransactional"}
+})
+
 struct ClientCapabilities {
     /// The supported set of SymbolKinds for workspace/symbol.
     /// workspace.symbol.symbolKind.valueSet
@@ -261,6 +289,8 @@ struct ClientCapabilities {
     /// Client supports snippets as insert text.
     /// textDocument.completion.completionItem.snippetSupport
     bool CompletionSnippets = true;
+
+    bool CompletionDeprecated = true;
 
     /// Client supports completions with additionalTextEdit near the cursor.
     /// This is a clangd extension. (LSP says this is for unrelated text only).
@@ -284,6 +314,9 @@ struct ClientCapabilities {
     std::vector<OffsetEncoding> offsetEncoding = {OffsetEncoding::UTF8};
     /// The content format that should be used for Hover requests.
     std::vector<MarkupKind> HoverContentFormat = {MarkupKind::PlainText};
+
+    bool ApplyEdit = false;
+    bool DocumentChanges = false;
     ClientCapabilities() {
         for (int i = 1; i <= 26; ++i) {
             WorkspaceSymbolKinds.push_back((SymbolKind) i);
@@ -294,23 +327,31 @@ struct ClientCapabilities {
     }
 };
 JSON_SERIALIZE(ClientCapabilities,MAP_JSON(
-        MAP_KV("textDocument",
-                MAP_KV("publishDiagnostics",
+            MAP_KV("textDocument",
+                MAP_KV("publishDiagnostics", // PublishDiagnosticsClientCapabilities
                         MAP_TO("categorySupport", DiagnosticCategory),
                         MAP_TO("codeActionsInline", DiagnosticFixes),
                         MAP_TO("relatedInformation", DiagnosticRelatedInformation),
                 ),
-                MAP_KV("completion",
+                MAP_KV("completion", // CompletionClientCapabilities
                         MAP_KV("completionItem",
-                                MAP_TO("snippetSupport", CompletionSnippets)),
+                                MAP_TO("snippetSupport", CompletionSnippets),
+                                MAP_TO("deprecatedSupport", CompletionDeprecated)),
                         MAP_KV("completionItemKind", MAP_TO("valueSet", CompletionItemKinds)),
                         MAP_TO("editsNearCursor", CompletionFixes)
                 ),
                 MAP_KV("codeAction", MAP_TO("codeActionLiteralSupport", CodeActionStructure)),
                 MAP_KV("documentSymbol", MAP_TO("hierarchicalDocumentSymbolSupport", HierarchicalDocumentSymbol)),
-                MAP_KV("hover", MAP_TO("contentFormat", HoverContentFormat)),
+                MAP_KV("hover",  //HoverClientCapabilities
+                        MAP_TO("contentFormat", HoverContentFormat)),
                 MAP_KV("signatureHelp", MAP_KV("signatureInformation", MAP_KV("parameterInformation", MAP_TO("labelOffsetSupport", OffsetsInSignatureHelp))))),
-            MAP_KV("workspace", MAP_KV("symbol", MAP_KV("symbolKind", MAP_TO("valueSet", WorkspaceSymbolKinds)))),
+            MAP_KV("workspace", // WorkspaceEditClientCapabilities
+                    MAP_KV("symbol", // WorkspaceSymbolClientCapabilities
+                            MAP_KV("symbolKind",
+                                    MAP_TO("valueSet", WorkspaceSymbolKinds))),
+                    MAP_TO("applyEdit", ApplyEdit),
+                    MAP_KV("workspaceEdit", // WorkspaceEditClientCapabilities
+                            MAP_TO("documentChanges", DocumentChanges))),
             MAP_TO("offsetEncoding", offsetEncoding)), {});
 
 struct ClangdCompileCommand {
@@ -421,7 +462,7 @@ struct TextDocumentContentChangeEvent {
     /// The length of the range that got replaced.
     option<int> rangeLength;
     /// The new text of the range/document.
-    TextType text;
+    std::string text;
 };
 JSON_SERIALIZE(TextDocumentContentChangeEvent, MAP_JSON(MAP_KEY(range), MAP_KEY(rangeLength), MAP_KEY(text)), {});
 
@@ -773,7 +814,7 @@ struct CompletionItem {
     ///
     /// Note: The range of the edit must be a single line range and it must
     /// contain the position at which completion has been requested.
-    option<TextEdit> textEdit;
+    TextEdit textEdit;
 
     /// An optional array of additional text edits that are applied when selecting
     /// this completion. Edits must not overlap with the main edit nor with
@@ -789,6 +830,19 @@ struct CompletionItem {
     // data?: any - A data entry field that is preserved on a completion item
     //              between a completion and a completion resolve request.
 };
+JSON_SERIALIZE(CompletionItem, {}, {
+    FROM_KEY(label);
+    FROM_KEY(kind);
+    FROM_KEY(detail);
+    FROM_KEY(documentation);
+    FROM_KEY(sortText);
+    FROM_KEY(filterText);
+    FROM_KEY(insertText);
+    FROM_KEY(insertTextFormat);
+    FROM_KEY(textEdit);
+    FROM_KEY(additionalTextEdits);
+});
+
 struct CompletionList {
     /// The list is not complete. Further typing should result in recomputing the
     /// list.
@@ -797,6 +851,11 @@ struct CompletionList {
     /// The completion items.
     std::vector<CompletionItem> items;
 };
+JSON_SERIALIZE(CompletionList, {}, {
+    FROM_KEY(isIncomplete);
+    FROM_KEY(items);
+});
+
 struct ParameterInformation {
 
     /// The label of this parameter. Ignored when labelOffsets is set.
@@ -811,6 +870,11 @@ struct ParameterInformation {
     /// The documentation of this parameter. Optional.
     std::string documentation;
 };
+JSON_SERIALIZE(ParameterInformation, {}, {
+    FROM_KEY(labelString);
+    FROM_KEY(labelOffsets);
+    FROM_KEY(documentation);
+});
 struct SignatureInformation {
 
     /// The label of this signature. Mandatory.
@@ -822,6 +886,11 @@ struct SignatureInformation {
     /// The parameters of this signature.
     std::vector<ParameterInformation> parameters;
 };
+JSON_SERIALIZE(SignatureInformation, {}, {
+    FROM_KEY(label);
+    FROM_KEY(documentation);
+    FROM_KEY(parameters);
+});
 struct SignatureHelp {
     /// The resulting signatures.
     std::vector<SignatureInformation> signatures;
@@ -836,6 +905,11 @@ struct SignatureHelp {
     /// not currently serialized for the LSP.
     Position argListStart;
 };
+JSON_SERIALIZE(SignatureHelp, {}, {
+    FROM_KEY(signatures);
+    FROM_KEY(activeParameter);
+    FROM_KEY(argListStart);
+});
 
 struct RenameParams {
     /// The document that was opened.
