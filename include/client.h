@@ -59,11 +59,11 @@ public:
     RequestID RegisterCapability() {
         return SendRequest("client/registerCapability");
     }
-    void DidOpen(DocumentUri uri, string_ref text) {
+    void DidOpen(DocumentUri uri, string_ref text, string_ref languageId = "cpp") {
         DidOpenTextDocumentParams params;
         params.textDocument.uri = std::move(uri);
-        params.textDocument.languageId = "cpp";
         params.textDocument.text = text;
+        params.textDocument.languageId = languageId;
         SendNotify("textDocument/didOpen", params);
     }
     void DidClose(DocumentUri uri) {
@@ -84,6 +84,17 @@ public:
         params.textDocument.uri = std::move(uri);
         params.range = range;
         return SendRequest("textDocument/rangeFormatting", params);
+    }
+    RequestID FoldingRange(DocumentUri uri) {
+        FoldingRangeParams params;
+        params.textDocument.uri = std::move(uri);
+        return SendRequest("textDocument/foldingRange", params);
+    }
+    RequestID SelectionRange(DocumentUri uri, std::vector<Position> &positions) {
+        SelectionRangeParams params;
+        params.textDocument.uri = std::move(uri);
+        params.positions = std::move(positions);
+        return SendRequest("textDocument/selectionRange", params);
     }
     RequestID OnTypeFormatting(DocumentUri uri, Position position, string_ref ch) {
         DocumentOnTypeFormattingParams params;

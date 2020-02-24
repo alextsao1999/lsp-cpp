@@ -265,7 +265,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(ResourceOperationKind, {
 NLOHMANN_JSON_SERIALIZE_ENUM(FailureHandlingKind, {
     {FailureHandlingKind::Abort, "abort"},
     {FailureHandlingKind::Transactional, "transactional"},
-    {FailureHandlingKind::Undo, "undo"}
+    {FailureHandlingKind::Undo, "undo"},
     {FailureHandlingKind::TextOnlyTransactional, "textOnlyTransactional"}
 })
 
@@ -364,9 +364,9 @@ JSON_SERIALIZE(ClangdCompileCommand,MAP_JSON(
 struct ConfigurationSettings {
     // Changes to the in-memory compilation database.
     // The key of the map is a file name.
-    std::map<TextType, ClangdCompileCommand> compilationDatabaseChanges;
+    std::map<std::string, ClangdCompileCommand> compilationDatabaseChanges;
 };
-JSON_SERIALIZE(ConfigurationSettings,MAP_JSON(MAP_KEY(compilationDatabaseChanges)), {});
+JSON_SERIALIZE(ConfigurationSettings, MAP_JSON(MAP_KEY(compilationDatabaseChanges)), {});
 
 struct InitializationOptions {
     // What we can change throught the didChangeConfiguration request, we can
@@ -530,6 +530,72 @@ struct DocumentOnTypeFormattingParams {
     TextType ch;
 };
 JSON_SERIALIZE(DocumentOnTypeFormattingParams, MAP_JSON(MAP_KEY(textDocument), MAP_KEY(position), MAP_KEY(ch)), {});
+
+struct FoldingRangeParams {
+    /// The document to format.
+    TextDocumentIdentifier textDocument;
+};
+JSON_SERIALIZE(FoldingRangeParams, MAP_JSON(MAP_KEY(textDocument)), {});
+
+enum class FoldingRangeKind {
+    Comment,
+    Imports,
+    Region,
+};
+NLOHMANN_JSON_SERIALIZE_ENUM(FoldingRangeKind, {
+    {FoldingRangeKind::Comment, "comment"},
+    {FoldingRangeKind::Imports, "imports"},
+    {FoldingRangeKind::Region, "region"}
+})
+
+struct FoldingRange {
+    /**
+     * The zero-based line number from where the folded range starts.
+     */
+    int startLine;
+    /**
+     * The zero-based character offset from where the folded range starts.
+     * If not defined, defaults to the length of the start line.
+     */
+    int startCharacter;
+    /**
+     * The zero-based line number where the folded range ends.
+     */
+    int endLine;
+    /**
+     * The zero-based character offset before the folded range ends.
+     * If not defined, defaults to the length of the end line.
+     */
+    int endCharacter;
+
+    FoldingRangeKind kind;
+};
+JSON_SERIALIZE(FoldingRange, {}, {
+    FROM_KEY(startLine);
+    FROM_KEY(startCharacter);
+    FROM_KEY(endLine);
+    FROM_KEY(endCharacter);
+    FROM_KEY(kind);
+});
+
+struct SelectionRangeParams {
+    /// The document to format.
+    TextDocumentIdentifier textDocument;
+    std::vector<Position> positions;
+};
+JSON_SERIALIZE(SelectionRangeParams, MAP_JSON(MAP_KEY(textDocument), MAP_KEY(positions)), {});
+
+struct SelectionRange {
+    Range range;
+    std::unique_ptr<SelectionRange> parent;
+};
+JSON_SERIALIZE(SelectionRange, {}, {
+    FROM_KEY(range);
+    if (j.contains("parent")) {
+        value.parent = std::make_unique<SelectionRange>();
+        j.at("parent").get_to(*value.parent);
+    }
+});
 
 struct DocumentFormattingParams {
     /// The document to format.
