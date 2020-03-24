@@ -12,6 +12,7 @@
 #include <vector>
 #include <tuple>
 #include <map>
+#include <memory>
 #include "uri.h"
 #define MAP_JSON(...) {j = {__VA_ARGS__};}
 #define MAP_KEY(KEY) {#KEY, value.KEY}
