@@ -41,10 +41,10 @@ enum class ErrorCode {
 };
 class LSPError {
 public:
-    TextType Message;
+    std::string Message;
     ErrorCode Code;
     static char ID;
-    LSPError(TextType Message, ErrorCode Code)
+    LSPError(std::string Message, ErrorCode Code)
             : Message(std::move(Message)), Code(Code) {}
 };
 JSON_SERIALIZE(URIForFile, {j = value.file;}, {value.file = j.get<std::string>();});
@@ -158,14 +158,12 @@ enum class TraceLevel {
 };
 enum class TextDocumentSyncKind {
     /// Documents should not be synced at all.
-            None = 0,
-
+    None = 0,
     /// Documents are synced by always sending the full content of the document.
-            Full = 1,
-
+    Full = 1,
     /// Documents are synced by sending the full content on open.  After that
     /// only incremental updates to the document are send.
-            Incremental = 2,
+    Incremental = 2,
 };
 enum class CompletionItemKind {
     Missing = 0,
@@ -354,6 +352,36 @@ JSON_SERIALIZE(ClientCapabilities,MAP_JSON(
                     MAP_KV("workspaceEdit", // WorkspaceEditClientCapabilities
                             MAP_TO("documentChanges", DocumentChanges))),
             MAP_TO("offsetEncoding", offsetEncoding)), {});
+
+struct ServerCapabilities {
+    json capabilities;
+    /**
+     * Defines how text documents are synced. Is either a detailed structure defining each notification or
+     * for backwards compatibility the TextDocumentSyncKind number. If omitted it defaults to `TextDocumentSyncKind.None`.
+     */
+    TextDocumentSyncKind textDocumentSync = TextDocumentSyncKind::None;
+    bool resolveProvider = false;
+    std::vector<std::string> executeCommands;
+    std::vector<std::string> signatureHelpTrigger;
+    std::vector<std::string> formattingTrigger;
+    std::vector<std::string> completionTrigger;
+    bool hasProvider(std::string &name) {
+        if (capabilities.contains(name)) {
+            if (capabilities[name].type() == json::value_t::boolean) {
+                return capabilities["name"];
+            }
+        }
+        return false;
+    }
+};
+JSON_SERIALIZE(ServerCapabilities, {}, {
+    value.capabilities = j;
+    FROM_KEY(textDocumentSync);
+    j["documentOnTypeFormattingProvider"]["firstTriggerCharacter"].get_to(value.formattingTrigger);
+    j["completionProvider"]["resolveProvider"].get_to(value.resolveProvider);
+    j["completionProvider"]["triggerCharacters"].get_to(value.completionTrigger);
+    j["executeCommandProvider"]["commands"].get_to(value.executeCommands);
+});
 
 struct ClangdCompileCommand {
     TextType workingDirectory;
@@ -652,14 +680,7 @@ struct Diagnostic {
     /// (These actions can also be obtained using textDocument/codeAction).
     option<std::vector<CodeAction>> codeActions;
 };
-JSON_SERIALIZE(Diagnostic, MAP_JSON(
-        MAP_KEY(range),
-        MAP_KEY(code),
-        MAP_KEY(source),
-        MAP_KEY(message),
-        MAP_KEY(relatedInformation),
-        MAP_KEY(category),
-        MAP_KEY(codeActions)),{FROM_KEY(range);FROM_KEY(code);FROM_KEY(source);FROM_KEY(message);
+JSON_SERIALIZE(Diagnostic, {/*NOT REQUIRED*/},{FROM_KEY(range);FROM_KEY(code);FROM_KEY(source);FROM_KEY(message);
                 FROM_KEY(relatedInformation);FROM_KEY(category);FROM_KEY(codeActions);});
 
 struct PublishDiagnosticsParams {

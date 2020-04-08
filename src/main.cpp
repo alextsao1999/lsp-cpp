@@ -2,13 +2,14 @@
 #include <thread>
 #include "client.h"
 int main() {
-    LanguageClient client(R"(F:\LLVM\bin\clangd.exe)");
+    URI uri;
+    uri.parse("https://www.baidu.com/test/asdf");
+    printf("%s", uri.host());
+    printf("%s", uri.path());
+
+    return 0;
+    ProcessLanguageClient client(R"(F:\LLVM\bin\clangd.exe)");
     MapMessageHandler my;
-
-    my.bindNotify<ShowMessageParams>("window/showMessage", [](auto &params) {
-        printf("message -> %s\n", params.message.c_str());
-    });
-
     std::thread thread([&] {
         client.loop(my);
     });

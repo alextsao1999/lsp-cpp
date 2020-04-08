@@ -7,37 +7,10 @@
 #include "transport.h"
 #include "protocol.h"
 #include "windows.h"
-
 class LanguageClient : public JsonTransport {
 public:
-    explicit LanguageClient(const char *exec, char *cmd = nullptr) {
-        SECURITY_ATTRIBUTES sa = {0};
-        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-        sa.bInheritHandle = true;
-        if (!CreatePipe(&fReadIn, &fWriteIn, &sa, 1024 * 1024)) {
-            printf("Create In Pipe error\n");
-        }
-        if (!CreatePipe(&fReadOut, &fWriteOut, &sa, 1024 * 1024)) {
-            printf("Create Out Pipe error\n");
-        }
-        STARTUPINFO si = {0};
-        si.cb = sizeof(si);
-        si.hStdInput = fReadIn;
-        si.hStdOutput = fWriteOut;
-        si.dwFlags = STARTF_USESTDHANDLES;
-        if (!CreateProcessA(exec, cmd, 0, 0, TRUE, CREATE_NO_WINDOW, 0, 0, (LPSTARTUPINFOA) &si, &fProcess)) {
-            printf("Create Process error\n");
-        }
-    }
-    ~LanguageClient() {
-        CloseHandle(fReadIn);
-        CloseHandle(fWriteIn);
-        CloseHandle(fReadOut);
-        CloseHandle(fWriteOut);
-        CloseHandle(fProcess.hThread);
-        CloseHandle(fProcess.hProcess);
-        TerminateProcess(fProcess.hProcess, 0);
-    }
+    virtual ~LanguageClient() = default;
+public:
     RequestID Initialize(option<DocumentUri> rootUri = {}) {
         InitializeParams params;
         params.processId = GetCurrentProcessId();
@@ -216,8 +189,64 @@ public:
         params.settings = std::move(settings);
         return SendRequest("workspace/didChangeConfiguration", std::move(params));
     }
-
 public:
+    RequestID SendRequest(string_ref method, value params = json()) {
+        RequestID id = method.str();
+        request(method, params, id);
+        return id;
+    }
+    void SendNotify(string_ref method, value params = json()) {
+        notify(method, params);
+    }
+};
+class ProcessLanguageClient : public LanguageClient {
+public:
+    HANDLE fReadIn = nullptr, fWriteIn = nullptr;
+    HANDLE fReadOut = nullptr, fWriteOut = nullptr;
+    PROCESS_INFORMATION fProcess = {nullptr};
+    explicit ProcessLanguageClient(const char *program, const char *arguments = "") {
+        SECURITY_ATTRIBUTES sa = {0};
+        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sa.bInheritHandle = true;
+        if (!CreatePipe(&fReadIn, &fWriteIn, &sa, 1024 * 1024)) {
+            printf("Create In Pipe error\n");
+        }
+        if (!CreatePipe(&fReadOut, &fWriteOut, &sa, 1024 * 1024)) {
+            printf("Create Out Pipe error\n");
+        }
+        STARTUPINFO si = {0};
+        si.cb = sizeof(si);
+        si.hStdInput = fReadIn;
+        si.hStdOutput = fWriteOut;
+        si.dwFlags = STARTF_USESTDHANDLES;
+        if (!CreateProcessA(program, (char *) arguments, 0, 0, TRUE,
+                            CREATE_NO_WINDOW, 0, 0, (LPSTARTUPINFOA) &si, &fProcess)) {
+            printf("Create Process error\n");
+        }
+
+        //m_exec.start(program, arguments);
+        //m_exec.set_wait_timeout(exec_stream_t::s_child, INFINITE);
+    }
+    ~ProcessLanguageClient() override {
+        /*
+        DisconnectNamedPipe(fReadIn);
+        DisconnectNamedPipe(fWriteIn);
+        DisconnectNamedPipe(fReadOut);
+        DisconnectNamedPipe(fWriteOut);
+        */
+        CloseHandle(fReadIn);
+        CloseHandle(fWriteIn);
+        CloseHandle(fReadOut);
+        CloseHandle(fWriteOut);
+        if (!TerminateProcess(fProcess.hProcess, 0)) {
+            printf("teminate process error!\n");
+        }
+        if (!TerminateThread(fProcess.hThread, 0)) {
+            printf("teminate thread error!\n");
+        }
+        CloseHandle(fProcess.hThread);
+        CloseHandle(fProcess.hProcess);
+    }
     void SkipLine() {
         char read;
         DWORD hasRead;
@@ -283,21 +312,6 @@ public:
         //printf("send:\n%s\n", content.c_str());
         return Write(header);
     }
-
-public:
-    RequestID SendRequest(string_ref method, value params = json()) {
-        RequestID id = method.str();
-        request(method, params, id);
-        return id;
-    }
-    void SendNotify(string_ref method, value params = json()) {
-        notify(method, params);
-    }
-private:
-    HANDLE fReadIn = nullptr, fWriteIn = nullptr;
-    HANDLE fReadOut = nullptr, fWriteOut = nullptr;
-    PROCESS_INFORMATION fProcess = {nullptr};
-
 };
 
 #endif //LSP_CLIENT_H
