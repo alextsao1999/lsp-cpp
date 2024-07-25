@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by Alex on 2020/1/28.
 //
 
@@ -9,8 +9,12 @@
 #include <cstring>
 #include <string>
 #include <regex>
-#include "json.hpp"
+#include <lsp/json.hpp>
+
+namespace LspCore {
+
 using json = nlohmann::json;
+
 class string_ref {
 public:
     static const size_t npos = ~size_t(0);
@@ -77,25 +81,24 @@ public:
     T &operator*() { return value(); }
     explicit operator bool() const { return fHas; }
 };
-namespace nlohmann {
-    template <typename T>
-    struct adl_serializer<option<T>> {
-        static void to_json(json& j, const option<T>& opt) {
-            if (opt.has()) {
-                j = opt.value();
-            } else {
-                j = nullptr;
-            }
-        }
-        static void from_json(const json& j, option<T>& opt) {
-            if (j.is_null()) {
-                opt = option<T>();
-            } else {
-                opt = option<T>(j.get<T>());
-            }
-        }
-    };
+
+template <typename T>
+void to_json(json& j, const LspCore::option<T>& opt) {
+    if (opt.has()) {
+        j = opt.value();
+    } else {
+        j = nullptr;
+    }
 }
+template <typename T>
+void from_json(const json& j, LspCore::option<T>& opt) {
+    if (j.is_null()) {
+        opt = LspCore::option<T>();
+    } else {
+        opt = LspCore::option<T>(j.get<T>());
+    }
+}
+
 
 inline uint8_t FromHex(const char digit) {
     if (digit >= '0' && digit <= '9')
@@ -152,7 +155,6 @@ struct URIForFile {
     URIForFile() = default;
     inline std::string &str() { return file; }
 };
-using DocumentUri = string_ref;
 
 class URI {
 public:
@@ -193,29 +195,29 @@ public:
 public:
     void parse(sview uri) {
         static const std::regex pattern{
-                "^([a-zA-Z]+[\\w\\+\\-\\.]+)?(\\://)?" //< scheme
-                "(([^:@]+)(\\:([^@]+))?@)?"            //< username && password
-                "([^/:?#]+)?(\\:(\\d+))?"              //< hostname && port
-                "([^?#]+)"                             //< path
-                "(\\?([^#]*))?"                        //< query
-                "(#(.*))?$"                            //< fragment
+            "^([a-zA-Z]+[\\w\\+\\-\\.]+)?(\\://)?" //< scheme
+            "(([^:@]+)(\\:([^@]+))?@)?"            //< username && password
+            "([^/:?#]+)?(\\:(\\d+))?"              //< hostname && port
+            "([^?#]+)"                             //< path
+            "(\\?([^#]*))?"                        //< query
+            "(#(.*))?$"                            //< fragment
         };
         static std::cmatch parts;
         m_uri = Decode(uri);
         if (std::regex_match(m_uri.c_str(), parts, pattern)) {
             m_path = sview(m_uri.c_str() + parts.position(10), parts.length(10));
             m_scheme = parts.length(1) ?
-                       sview(m_uri.c_str() + parts.position(1), parts.length(1)) : sview{};
+                           sview(m_uri.c_str() + parts.position(1), parts.length(1)) : sview{};
             m_userinfo = parts.length(3) ?
-                         sview(m_uri.data() + parts.position(3), parts.length(3)) : sview{};
+                             sview(m_uri.data() + parts.position(3), parts.length(3)) : sview{};
             m_host = parts.length(7) ?
-                     sview(m_uri.data() + parts.position(7), parts.length(7)) : sview{};
+                         sview(m_uri.data() + parts.position(7), parts.length(7)) : sview{};
             m_port = parts.length(9) ?
-                     sview(m_uri.data() + parts.position(9), parts.length(9)) : sview{};
+                         sview(m_uri.data() + parts.position(9), parts.length(9)) : sview{};
             m_query = parts.length(11) ?
-                      sview(m_uri.data() + parts.position(11), parts.length(11)) : sview{};
+                          sview(m_uri.data() + parts.position(11), parts.length(11)) : sview{};
             m_fragment = parts.length(13) ?
-                         sview(m_uri.data() + parts.position(13), parts.length(13)) : sview{};
+                             sview(m_uri.data() + parts.position(13), parts.length(13)) : sview{};
         }
     }
     sview path() { return m_path; }
@@ -226,7 +228,7 @@ public:
     sview query() { return m_query; }
     sview fragment() { return m_fragment; }
     sview query(sview key) {
-/*
+        /*
         static const std::regex query_token_pattern {"[^?=&]+"};
         auto query = query_.to_string();
         auto it  = std::sregex_iterator(query.cbegin(), query.cend(), query_token_pattern);
@@ -264,5 +266,30 @@ private:
     sview m_fragment;
 
 };
+
+}
+
+// namespace nlohmann {
+
+// template <typename T>
+// struct adl_serializer<LspCore::option<T>> {
+//     static void to_json(json& j, const LspCore::option<T>& opt) {
+//         if (opt.has()) {
+//             j = opt.value();
+//         } else {
+//             j = nullptr;
+//         }
+//     }
+//     static void from_json(const json& j, LspCore::option<T>& opt) {
+//         if (j.is_null()) {
+//             opt = LspCore::option<T>();
+//         } else {
+//             opt = LspCore::option<T>(j.get<T>());
+//         }
+//     }
+// };
+
+// }
+
 
 #endif //LSP_URI_H

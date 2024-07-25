@@ -1,4 +1,4 @@
-/*
+﻿/*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++
 |  |  |__   |  |  | | | |  version 3.7.3
@@ -26,6 +26,7 @@ LIABILITY, WHETHER IN AN ACTION OF  CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE  OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
 
 #ifndef INCLUDE_NLOHMANN_JSON_HPP_
 #define INCLUDE_NLOHMANN_JSON_HPP_

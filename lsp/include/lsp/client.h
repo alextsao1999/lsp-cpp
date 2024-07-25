@@ -1,15 +1,19 @@
-//
+﻿//
 // Created by Alex on 2020/1/28.
 //
 
 #ifndef LSP_CLIENT_H
 #define LSP_CLIENT_H
-#include "transport.h"
-#include "protocol.h"
-#include "windows.h"
+
+#include <lsp/transport.h>
+#include <lsp/protocol.h>
+
+namespace LspCore {
+
 class LanguageClient : public JsonTransport {
 public:
-    virtual ~LanguageClient() = default;
+    LanguageClient(MapMessageHandler& msgHandler, JsonIOLayer& jsonIO) : JsonTransport(msgHandler, jsonIO){}
+    virtual ~LanguageClient(){}
 public:
     RequestID Initialize(option<DocumentUri> rootUri = {}) {
         InitializeParams params;
@@ -32,6 +36,7 @@ public:
     RequestID RegisterCapability() {
         return SendRequest("client/registerCapability");
     }
+    //=============文档同步相关API=========================================
     void DidOpen(DocumentUri uri, string_ref text, string_ref languageId = "cpp") {
         DidOpenTextDocumentParams params;
         params.textDocument.uri = std::move(uri);
@@ -51,6 +56,33 @@ public:
         params.contentChanges = std::move(changes);
         params.wantDiagnostics = wantDiagnostics;
         SendNotify("textDocument/didChange", params);
+    }
+    //=============语言特性相关API=========================================
+    // 跳转
+    RequestID GoToDefinition(DocumentUri uri, Position position) {
+        TextDocumentPositionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/definition", std::move(params));
+    }
+    // 跳转
+    RequestID GoToDeclaration(DocumentUri uri, Position position) {
+        TextDocumentPositionParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/declaration", std::move(params));
+    }
+    RequestID References(DocumentUri uri, Position position) {
+        ReferenceParams params;
+        params.textDocument.uri = std::move(uri);
+        params.position = position;
+        return SendRequest("textDocument/references", std::move(params));
+    }
+    // 获取文档的词语列表
+    RequestID SemanticTokensALL(DocumentUri uri, ProgressToken token = "") {
+        SemanticTokensParams params;
+        params.textDocument.uri = uri;
+        return SendRequest(METHOD_SemanticTokensFull, std::move(params));
     }
     RequestID RangeFomatting(DocumentUri uri, Range range) {
         DocumentRangeFormattingParams params;
@@ -101,24 +133,6 @@ public:
         params.position = position;
         return SendRequest("textDocument/signatureHelp", std::move(params));
     }
-    RequestID GoToDefinition(DocumentUri uri, Position position) {
-        TextDocumentPositionParams params;
-        params.textDocument.uri = std::move(uri);
-        params.position = position;
-        return SendRequest("textDocument/definition", std::move(params));
-    }
-    RequestID GoToDeclaration(DocumentUri uri, Position position) {
-        TextDocumentPositionParams params;
-        params.textDocument.uri = std::move(uri);
-        params.position = position;
-        return SendRequest("textDocument/declaration", std::move(params));
-    }
-    RequestID References(DocumentUri uri, Position position) {
-        ReferenceParams params;
-        params.textDocument.uri = std::move(uri);
-        params.position = position;
-        return SendRequest("textDocument/references", std::move(params));
-    }
     RequestID SwitchSourceHeader(DocumentUri uri) {
         TextDocumentIdentifier params;
         params.uri = std::move(uri);
@@ -167,6 +181,9 @@ public:
         params.resolve = resolve;
         return SendRequest("textDocument/typeHierarchy", std::move(params));
     }
+
+
+    //=============工作区相关API=========================================
     RequestID WorkspaceSymbol(string_ref query) {
         WorkspaceSymbolParams params;
         params.query = query;
@@ -199,119 +216,10 @@ public:
         notify(method, params);
     }
 };
-class ProcessLanguageClient : public LanguageClient {
-public:
-    HANDLE fReadIn = nullptr, fWriteIn = nullptr;
-    HANDLE fReadOut = nullptr, fWriteOut = nullptr;
-    PROCESS_INFORMATION fProcess = {nullptr};
-    explicit ProcessLanguageClient(const char *program, const char *arguments = "") {
-        SECURITY_ATTRIBUTES sa = {0};
-        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-        sa.bInheritHandle = true;
-        if (!CreatePipe(&fReadIn, &fWriteIn, &sa, 1024 * 1024)) {
-            printf("Create In Pipe error\n");
-        }
-        if (!CreatePipe(&fReadOut, &fWriteOut, &sa, 1024 * 1024)) {
-            printf("Create Out Pipe error\n");
-        }
-        STARTUPINFO si = {0};
-        si.cb = sizeof(si);
-        si.hStdInput = fReadIn;
-        si.hStdOutput = fWriteOut;
-        si.dwFlags = STARTF_USESTDHANDLES;
-        if (!CreateProcessA(program, (char *) arguments, 0, 0, TRUE,
-                            CREATE_NO_WINDOW, 0, 0, (LPSTARTUPINFOA) &si, &fProcess)) {
-            printf("Create Process error\n");
-        }
 
-        //m_exec.start(program, arguments);
-        //m_exec.set_wait_timeout(exec_stream_t::s_child, INFINITE);
-    }
-    ~ProcessLanguageClient() override {
-        /*
-        DisconnectNamedPipe(fReadIn);
-        DisconnectNamedPipe(fWriteIn);
-        DisconnectNamedPipe(fReadOut);
-        DisconnectNamedPipe(fWriteOut);
-        */
-        CloseHandle(fReadIn);
-        CloseHandle(fWriteIn);
-        CloseHandle(fReadOut);
-        CloseHandle(fWriteOut);
-        if (!TerminateProcess(fProcess.hProcess, 0)) {
-            printf("teminate process error!\n");
-        }
-        if (!TerminateThread(fProcess.hThread, 0)) {
-            printf("teminate thread error!\n");
-        }
-        CloseHandle(fProcess.hThread);
-        CloseHandle(fProcess.hProcess);
-    }
-    void SkipLine() {
-        char read;
-        DWORD hasRead;
-        while (ReadFile(fReadOut, &read, 1, &hasRead, NULL)) {
-            if (read == '\n') {
-                break;
-            }
-        }
-    }
-    int ReadLength() {
-        // "Content-Length: "
-        char szReadBuffer[255];
-        DWORD hasRead;
-        int length = 0;
-        while (ReadFile(fReadOut, &szReadBuffer[length], 1, &hasRead, NULL)) {
-            if (szReadBuffer[length] == '\n') {
-                break;
-            }
-            length++;
-        }
-        return atoi(szReadBuffer + 16);
-    }
-    void Read(int length, std::string &out) {
-        int readSize = 0;
-        DWORD hasRead;
-        out.resize(length);
-        while (ReadFile(fReadOut, &out[readSize], length, &hasRead, NULL)) {
-            readSize += hasRead;
-            if (readSize >= length) {
-                break;
-            }
-        }
-    }
-    bool Write(std::string &in) {
-        DWORD hasWritten;
-        int writeSize = 0;
-        int totalSize = in.length();
-        while (WriteFile(fWriteIn, &in[writeSize], totalSize, &hasWritten, 0)) {
-            writeSize += hasWritten;
-            if (writeSize >= totalSize) {
-                break;
-            }
-        }
-        return true;
-    }
-    bool readJson(json &json) override {
-        json.clear();
-        int length = ReadLength();
-        SkipLine();
-        std::string read;
-        Read(length, read);
-        try {
-            json = json::parse(read);
-        } catch (std::exception &e) {
-            //printf("read error -> %s\nread -> %s\n ", e.what(), read.c_str());
-        }
-        //printf("message %d:\n%s\n", length, read.c_str());
-        return true;
-    }
-    bool writeJson(json &json) override {
-        std::string content = json.dump();
-        std::string header = "Content-Length: " + std::to_string(content.length()) + "\r\n\r\n" + content;
-        //printf("send:\n%s\n", content.c_str());
-        return Write(header);
-    }
-};
+
+}
+
+
 
 #endif //LSP_CLIENT_H

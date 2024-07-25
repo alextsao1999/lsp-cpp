@@ -1,10 +1,15 @@
-cmake_minimum_required(VERSION 3.14)
-project(Lsp)
+﻿cmake_minimum_required(VERSION 3.5)
+project(LspCPP VERSION 0.1 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include_directories(include)
-include_directories(src)
-aux_source_directory(src/ sources)
-set(lsp_include_dirs ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE INTERNAL "" )
-add_executable(LspClientTest ${sources})
+option(LspBuildTest "build test" ON)
+
+add_subdirectory(lsp)
+if(LspBuildTest)
+    add_subdirectory(test)
+endif()
+
+
+
